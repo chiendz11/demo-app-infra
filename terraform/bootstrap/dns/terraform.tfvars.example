@@ -1,0 +1,4 @@
+region      = "ap-southeast-1"
+root_domain = "example.com"
+owner       = "Bui Anh Chien"
+
