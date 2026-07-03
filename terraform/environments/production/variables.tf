@@ -87,6 +87,19 @@ variable "github_deploy_environment" {
   default     = "production"
 }
 
+variable "github_oidc_provider_arn" {
+  description = "ARN exported by the GitHub OIDC bootstrap stack."
+  type        = string
+
+  validation {
+    condition = can(regex(
+      "^arn:[^:]+:iam::[0-9]{12}:oidc-provider/token\\.actions\\.githubusercontent\\.com$",
+      trimspace(var.github_oidc_provider_arn),
+    ))
+    error_message = "github_oidc_provider_arn must be the ARN of the AWS IAM OIDC provider for GitHub Actions."
+  }
+}
+
 variable "app_deploy_role_name" {
   description = "IAM role assumed by the demo-app production deployment workflow."
   type        = string
