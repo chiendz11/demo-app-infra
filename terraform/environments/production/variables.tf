@@ -58,3 +58,26 @@ variable "owner" {
   type        = string
   default     = "Bui Anh Chien"
 }
+
+variable "github_deploy_repository" {
+  description = "GitHub repository allowed to assume the application deployment role."
+  type        = string
+  default     = "chiendz11/demo-app-ci"
+
+  validation {
+    condition     = can(regex("^[^/]+/[^/]+$", trimspace(var.github_deploy_repository)))
+    error_message = "github_deploy_repository must use the owner/repository format."
+  }
+}
+
+variable "github_deploy_environment" {
+  description = "GitHub Environment used by the production application deployment job."
+  type        = string
+  default     = "production"
+}
+
+variable "app_deploy_role_name" {
+  description = "IAM role assumed by the demo-app production deployment workflow."
+  type        = string
+  default     = "demo-app-ci-production-deploy-role"
+}

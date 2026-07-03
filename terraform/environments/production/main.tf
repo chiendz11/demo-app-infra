@@ -45,7 +45,22 @@ locals {
     set -eux
 
     dnf update -y
-    dnf install -y nginx
+    dnf install -y docker nginx
+
+    install -d -m 0755 /etc/docker
+
+    cat > /etc/docker/daemon.json <<'DOCKER'
+    {
+      "log-driver": "json-file",
+      "log-opts": {
+        "max-size": "10m",
+        "max-file": "3"
+      }
+    }
+    DOCKER
+
+    systemctl enable --now docker
+    usermod -aG docker ec2-user
 
     cat > /etc/nginx/conf.d/demo-app.conf <<'NGINX'
     server {
@@ -65,7 +80,7 @@ locals {
     NGINX
 
     cat > /usr/share/nginx/html/index.html <<'HTML'
-    hello from ${var.project_name}
+    ${var.project_name} is ready for the first container deployment
     HTML
 
     systemctl enable --now nginx

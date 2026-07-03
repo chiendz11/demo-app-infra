@@ -57,3 +57,8 @@ output "instance_role_arn" {
   description = "IAM role ARN attached to the private EC2 instance."
   value       = module.compute.instance_role_arn
 }
+
+output "app_deploy_role_arn" {
+  description = "IAM role ARN assumed by the demo-app-ci production deployment workflow."
+  value       = aws_iam_role.app_deploy.arn
+}

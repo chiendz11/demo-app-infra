@@ -6,3 +6,7 @@ app_port      = 8080
 root_domain   = "example.com"
 app_subdomain = "app"
 owner         = "Bui Anh Chien"
+
+github_deploy_repository = "chiendz11/demo-app-ci"
+github_deploy_environment = "production"
+app_deploy_role_name      = "demo-app-ci-production-deploy-role"
