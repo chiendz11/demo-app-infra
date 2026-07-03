@@ -1,0 +1,120 @@
+name: terraform-plan
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-plan-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_WORKING_DIR: terraform/environments/production
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+  TF_VAR_root_domain: ${{ vars.ROOT_DOMAIN }}
+  TF_VAR_app_subdomain: ${{ vars.APP_SUBDOMAIN || 'app' }}
+  TF_VAR_instance_type: ${{ vars.INSTANCE_TYPE || 't3.micro' }}
+
+jobs:
+  validate:
+    name: Format and validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive terraform
+
+      - name: Initialize and validate all root modules
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          roots=(
+            terraform/bootstrap/backend
+            terraform/bootstrap/dns
+            terraform/bootstrap/github-oidc
+            terraform/environments/production
+          )
+
+          for root in "${roots[@]}"; do
+            echo "::group::Validate ${root}"
+            terraform -chdir="${root}" init -backend=false -input=false
+            terraform -chdir="${root}" validate
+            echo "::endgroup::"
+          done
+
+  plan:
+    name: Plan production
+    needs: validate
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: infrastructure-plan
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure read-only AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: terraform-plan-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Initialize production backend
+        run: terraform -chdir="$TF_WORKING_DIR" init -input=false
+
+      - name: Create production plan
+        run: |
+          terraform -chdir="$TF_WORKING_DIR" plan \
+            -input=false \
+            -lock-timeout=5m \
+            -no-color \
+            -out=tfplan
+
+          terraform -chdir="$TF_WORKING_DIR" show \
+            -no-color \
+            tfplan > "$TF_WORKING_DIR/terraform-plan.txt"
+
+      - name: Upload human-readable plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.run_id }}
+          path: ${{ env.TF_WORKING_DIR }}/terraform-plan.txt
+          retention-days: 7
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## Terraform production plan"
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Environment: \`production\`"
+            echo "- Full plan: workflow artifact \`terraform-plan-${GITHUB_RUN_ID}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

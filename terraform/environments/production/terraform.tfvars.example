@@ -1,0 +1,13 @@
+region           = "ap-southeast-1"
+vpc_cidr         = "10.30.0.0/16"
+project_name     = "demo-app-prod"
+instance_type    = "t3.small"
+root_volume_size = 20
+app_port         = 8080
+root_domain      = "example.com"
+app_subdomain    = "app"
+owner            = "Bui Anh Chien"
+
+github_deploy_repository = "chiendz11/demo-app-ci"
+github_deploy_environment = "production"
+app_deploy_role_name      = "demo-app-ci-production-deploy-role"

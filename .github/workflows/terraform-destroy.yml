@@ -1,0 +1,88 @@
+name: terraform-destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DESTROY-production to remove production infrastructure"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-production
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_WORKING_DIR: terraform/environments/production
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+  TF_VAR_root_domain: ${{ vars.ROOT_DOMAIN }}
+  TF_VAR_app_subdomain: ${{ vars.APP_SUBDOMAIN || 'app' }}
+  TF_VAR_instance_type: ${{ vars.INSTANCE_TYPE || 't3.micro' }}
+
+jobs:
+  destroy:
+    name: Destroy production
+    runs-on: ubuntu-latest
+    environment: infrastructure
+
+    steps:
+      - name: Verify destructive action
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          if [ "$CONFIRMATION" != "DESTROY-production" ]; then
+            echo "Confirmation must be exactly: DESTROY-production"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: terraform-destroy-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Initialize production backend
+        run: terraform -chdir="$TF_WORKING_DIR" init -input=false
+
+      - name: Create destroy plan
+        run: |
+          terraform -chdir="$TF_WORKING_DIR" plan \
+            -destroy \
+            -input=false \
+            -lock-timeout=5m \
+            -out=tfplan
+
+      - name: Destroy production infrastructure
+        run: |
+          terraform -chdir="$TF_WORKING_DIR" apply \
+            -input=false \
+            -lock-timeout=5m \
+            tfplan
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## Production infrastructure destroyed"
+            echo ""
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Triggered by: \`${GITHUB_ACTOR}\`"
+            echo "- Status: destroyed successfully"
+          } >> "$GITHUB_STEP_SUMMARY"
+
