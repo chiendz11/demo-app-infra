@@ -65,7 +65,9 @@ locals {
     set -eux
 
     dnf update -y
-    dnf install -y curl docker nginx openssl
+    # Amazon Linux 2023 includes curl-minimal, which conflicts with the full
+    # curl package but still provides the curl CLI used below.
+    dnf install -y docker nginx openssl
 
     install -d -m 0755 /etc/docker
 
