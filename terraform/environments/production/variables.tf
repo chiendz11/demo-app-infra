@@ -24,7 +24,18 @@ variable "project_name" {
 variable "instance_type" {
   description = "EC2 instance type used to host the application stack."
   type        = string
-  default     = "t3.micro"
+  default     = "t3.small"
+}
+
+variable "root_volume_size" {
+  description = "Encrypted gp3 root volume size in GiB for application and observability data."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.root_volume_size >= 20
+    error_message = "root_volume_size must be at least 20 GiB for metrics and log retention."
+  }
 }
 
 variable "app_port" {

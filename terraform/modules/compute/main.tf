@@ -122,6 +122,13 @@ resource "aws_instance" "web" {
     http_tokens   = "required"
   }
 
+  root_block_device {
+    encrypted             = true
+    volume_type           = "gp3"
+    volume_size           = var.root_volume_size
+    delete_on_termination = true
+  }
+
   tags = merge(var.tags, {
     Name = "${var.project_name}-ec2"
   })

@@ -40,12 +40,30 @@ locals {
     az   = data.aws_availability_zones.available.names[0]
   }
 
+  observability_compose = base64gzip(
+    file("${path.module}/observability/compose.yml")
+  )
+  prometheus_config = base64gzip(
+    templatefile("${path.module}/observability/prometheus.yml.tftpl", {
+      application_url = "https://${local.application_domain}/health"
+    })
+  )
+  loki_config = base64gzip(
+    file("${path.module}/observability/loki.yml")
+  )
+  alloy_config = base64gzip(
+    file("${path.module}/observability/config.alloy")
+  )
+  grafana_datasources = base64gzip(
+    file("${path.module}/observability/grafana-datasources.yml")
+  )
+
   user_data = <<-EOF
     #!/bin/bash
     set -eux
 
     dnf update -y
-    dnf install -y docker nginx
+    dnf install -y curl docker nginx openssl
 
     install -d -m 0755 /etc/docker
 
@@ -61,6 +79,14 @@ locals {
 
     systemctl enable --now docker
     usermod -aG docker ec2-user
+
+    COMPOSE_VERSION="v2.32.4"
+    install -d -m 0755 /usr/local/lib/docker/cli-plugins
+    curl --fail --location --retry 5 \
+      "https://github.com/docker/compose/releases/download/$${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+      --output /usr/local/lib/docker/cli-plugins/docker-compose
+    chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
+    docker compose version
 
     cat > /etc/nginx/conf.d/demo-app.conf <<'NGINX'
     server {
@@ -85,6 +111,62 @@ locals {
 
     systemctl enable --now nginx
     systemctl enable --now amazon-ssm-agent || true
+
+    install -d -m 0755 \
+      /opt/observability \
+      /opt/observability/grafana/provisioning/datasources
+
+    printf '%s' '${local.observability_compose}' \
+      | base64 --decode | gzip --decompress \
+      > /opt/observability/compose.yml
+
+    printf '%s' '${local.prometheus_config}' \
+      | base64 --decode | gzip --decompress \
+      > /opt/observability/prometheus.yml
+
+    printf '%s' '${local.loki_config}' \
+      | base64 --decode | gzip --decompress \
+      > /opt/observability/loki.yml
+
+    printf '%s' '${local.alloy_config}' \
+      | base64 --decode | gzip --decompress \
+      > /opt/observability/config.alloy
+
+    printf '%s' '${local.grafana_datasources}' \
+      | base64 --decode | gzip --decompress \
+      > /opt/observability/grafana/provisioning/datasources/datasources.yml
+
+    if [ ! -s /opt/observability/.env ]; then
+      umask 077
+      printf 'GRAFANA_ADMIN_PASSWORD=%s\n' "$(openssl rand -hex 24)" \
+        > /opt/observability/.env
+    fi
+
+    chmod 0600 /opt/observability/.env
+
+    cat > /etc/systemd/system/demo-app-observability.service <<'SYSTEMD'
+    [Unit]
+    Description=Demo app observability stack
+    Wants=network-online.target
+    After=network-online.target docker.service
+    Requires=docker.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    WorkingDirectory=/opt/observability
+    ExecStart=/usr/bin/docker compose --env-file /opt/observability/.env up -d --remove-orphans
+    ExecStop=/usr/bin/docker compose --env-file /opt/observability/.env down
+    TimeoutStartSec=0
+    Restart=on-failure
+    RestartSec=30
+
+    [Install]
+    WantedBy=multi-user.target
+    SYSTEMD
+
+    systemctl daemon-reload
+    systemctl enable --now demo-app-observability.service
   EOF
 }
 
@@ -107,10 +189,13 @@ module "compute" {
   subnet_id         = module.network.private_subnet_id
   public_subnet_ids = values(module.network.public_subnet_ids)
   instance_type     = var.instance_type
+  root_volume_size  = var.root_volume_size
   app_port          = var.app_port
   health_check_path = "/health"
   domain_name       = local.application_domain
   route53_zone_id   = data.aws_route53_zone.main.zone_id
   user_data         = local.user_data
   tags              = local.common_tags
+
+  depends_on = [module.network]
 }

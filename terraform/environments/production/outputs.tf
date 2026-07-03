@@ -62,3 +62,8 @@ output "app_deploy_role_arn" {
   description = "IAM role ARN assumed by the demo-app-ci production deployment workflow."
   value       = aws_iam_role.app_deploy.arn
 }
+
+output "grafana_port_forward_command" {
+  description = "AWS CLI command that forwards local port 3000 to the private Grafana service through SSM."
+  value       = "aws ssm start-session --target ${module.compute.instance_id} --document-name AWS-StartPortForwardingSession --parameters '{\"portNumber\":[\"3000\"],\"localPortNumber\":[\"3000\"]}'"
+}

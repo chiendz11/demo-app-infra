@@ -28,6 +28,12 @@ variable "instance_type" {
   type        = string
 }
 
+variable "root_volume_size" {
+  description = "Size in GiB of the encrypted gp3 root volume."
+  type        = number
+  default     = 20
+}
+
 variable "user_data" {
   description = "Cloud-init shell script executed when the EC2 instance starts."
   type        = string
