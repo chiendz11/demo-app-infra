@@ -52,7 +52,9 @@ locals {
     file("${path.module}/observability/loki.yml")
   )
   alloy_config = base64gzip(
-    file("${path.module}/observability/config.alloy")
+    templatefile("${path.module}/observability/config.alloy.tftpl", {
+      application_url = "https://${local.application_domain}/health"
+    })
   )
   grafana_datasources = base64gzip(
     file("${path.module}/observability/grafana-datasources.yml")

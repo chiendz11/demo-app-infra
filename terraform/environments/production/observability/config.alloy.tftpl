@@ -1,0 +1,128 @@
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+prometheus.remote_write "local" {
+	external_labels = {
+		collector   = "alloy",
+		environment = "production",
+	}
+
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+
+		queue_config {
+			capacity             = 2500
+			max_samples_per_send = 500
+			max_shards           = 2
+		}
+	}
+}
+
+prometheus.scrape "prometheus" {
+	targets = [{
+		"__address__" = "prometheus:9090",
+		"instance"    = "prometheus",
+		"job"         = "prometheus",
+	}]
+
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+	forward_to      = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.scrape "alloy" {
+	targets = [{
+		"__address__" = "alloy:12345",
+		"instance"    = "alloy",
+		"job"         = "alloy",
+	}]
+
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+	forward_to      = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.scrape "node_exporter" {
+	targets = [{
+		"__address__" = "node-exporter:9100",
+		"instance"    = "node-exporter",
+		"job"         = "node-exporter",
+	}]
+
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+	forward_to      = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.scrape "demo_app" {
+	targets = [{
+		"__address__" = "demo-app:3000",
+		"instance"    = "demo-app",
+		"job"         = "demo-app",
+	}]
+
+	metrics_path    = "/metrics"
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+	forward_to      = [prometheus.remote_write.local.receiver]
+}
+
+prometheus.scrape "demo_app_blackbox" {
+	targets = [{
+		"__address__" = "blackbox-exporter:9115",
+		"instance"    = "${application_url}",
+		"job"         = "demo-app-blackbox",
+	}]
+
+	metrics_path    = "/probe"
+	scrape_interval = "30s"
+	scrape_timeout  = "10s"
+	params          = {
+		module = ["http_2xx"],
+		target = ["${application_url}"],
+	}
+
+	forward_to = [prometheus.remote_write.local.receiver]
+}
+
+discovery.docker "local" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "5s"
+}
+
+discovery.relabel "docker_logs" {
+	targets = []
+
+	rule {
+		source_labels = ["__meta_docker_container_label_logging"]
+		regex         = "alloy"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "service_name"
+	}
+}
+
+loki.source.docker "containers" {
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.docker.local.targets
+	relabel_rules = discovery.relabel.docker_logs.rules
+
+	labels = {
+		environment = "production",
+		platform    = "docker",
+	}
+
+	forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

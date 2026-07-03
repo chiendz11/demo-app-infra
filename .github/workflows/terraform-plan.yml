@@ -100,7 +100,7 @@ jobs:
 
           terraform -chdir="$TF_WORKING_DIR" show \
             -no-color \
-            tfplan > terraform-plan.txt
+            tfplan > "$TF_WORKING_DIR/terraform-plan.txt"
 
       - name: Upload human-readable plan
         uses: actions/upload-artifact@v4
@@ -118,4 +118,3 @@ jobs:
             echo "- Environment: \`production\`"
             echo "- Full plan: workflow artifact \`terraform-plan-${GITHUB_RUN_ID}\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
