@@ -10,4 +10,5 @@ owner            = "Bui Anh Chien"
 
 github_deploy_repository = "chiendz11/demo-app-ci"
 github_deploy_environment = "production"
+github_oidc_provider_arn  = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
 app_deploy_role_name      = "demo-app-ci-production-deploy-role"

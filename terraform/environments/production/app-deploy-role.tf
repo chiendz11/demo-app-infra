@@ -2,17 +2,13 @@ data "aws_caller_identity" "current" {}
 
 data "aws_partition" "current" {}
 
-data "aws_iam_openid_connect_provider" "github" {
-  arn = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
-}
-
 data "aws_iam_policy_document" "app_deploy_assume_role" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
 
     principals {
       type        = "Federated"
-      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
+      identifiers = [trimspace(var.github_oidc_provider_arn)]
     }
 
     condition {
